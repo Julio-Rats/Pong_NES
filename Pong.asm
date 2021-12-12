@@ -1,9 +1,12 @@
 .segment "HEADER"
-  .byte $4E, $45, $53, $1A  ; iNES header identifier
-  .byte 2                   ; 2x 16KB PRG-ROM Banks
-  .byte 1                   ; 1x  8KB CHR-ROM
-  .byte $02, $00            ; mapper 0, vertical mirroring
-  .byte 0,0,0,0,0,0,0,0
+  .byte $4E, $45            ; iNES header identifier
+  .byte $53, $1A     
+  .byte $02, $01            ; 2x 16KB PRG-ROM Banks, 1x  8KB CHR-ROM
+  .byte $00, $00            ; mapper 0, horizontal mirroring,  no battery, 
+  .byte $00, $00            ; NTSC
+  .byte $00, $00            ; Reserved (NESv2) (RAM chr)
+  .byte $00, $00            ; Reserved (NESv2) (WRAM)
+  .byte $00, $00            ; Reserved (NESv2) (Save RAM)
 
 .segment "VECTORS"
   .addr nmi
@@ -14,16 +17,32 @@
 
 .segment "CODE"
 
-; Variaveis
- 
+;===================  Constante   =============================
+Speed_ball    = 03
+Speed_players = 04
+P0_Xpos       = $0207 ; DW
+P1_Xpos       = $0213 ; DW
+P0_Ypos       = $0204 ; DW
+P1_Ypos       = $0210 ; DW
+Ball_Xpos     = $021F ; DW
+Ball_Ypos     = $021C ; DW
+Ball_Limit_Under = $E0
+Ball_Limit_Upper = $23
+
+;===================  Variaveis   =============================
+; Variaveis (RAM Interna do NES)
+; ---> Zero Page used here ! $00--$FF (256 Bytes Free RAM) <---
 Ball_Control = $00
-; Bit                   Descrição
+; Bit                    Descrição
+
 ;  0                      Alive?          1-true,0-false
 ;  1                      move_right?     1-true,0-false
 ;  2                      move_down?      1-true,0-false
 ;  4                      side_dead?      1-left,0-right
 
-Ball_Speed   = $01
+; Memoria reserada para futura implementação de velocidade dinamica
+Ball_Speed   = $01  
+; Memoria reserada para futura implementação de velocidade dinamica    
 Player_Speed = $02
 P0_Score     = $03
 P1_Score     = $04
@@ -55,7 +74,6 @@ P1_Score     = $04
   stx $2000
   stx $2001
   stx $4010
-  bit $2002
 @vblankWait1:
   bit $2002
   bpl @vblankWait1
@@ -70,21 +88,22 @@ P1_Score     = $04
   sta $0600, x
   sta $0700, x
   inx
-  bne @clearMemory
-@vblankWait2:
-  bit $2002
-  bpl @vblankWait2
-main:
+  bne @clearMemory 
+  ; Inicializando Variaveis
   lda #%000000000
   sta Ball_Control
   lda #0
   sta P0_Score
   sta P1_Score   
-  lda #2
+  lda #Speed_ball
   sta Ball_Speed
-  lda #3
+  lda #Speed_players
   sta Player_Speed
 
+@vblankWait2:
+  bit $2002
+  bpl @vblankWait2
+main:
   lda #$04
   sta $2000
   jsr Line_Center
@@ -336,20 +355,20 @@ exit_read_control:
 .proc move_players
   tya
   clc
-  adc $0204,x
+  adc P0_Ypos,x
   cmp #$26
   bcc exit_move_players
   cmp #$CE
   bcs exit_move_players
-  sta $0204,x
+  sta P0_Ypos,x
   tya
   clc
-  adc $0208,x
-  sta $0208,x
+  adc P0_Ypos+4,x
+  sta P0_Ypos+4,x
   tya
   clc
-  adc $020C,x
-  sta $020C,x
+  adc P0_Ypos+8,x
+  sta P0_Ypos+8,x
 exit_move_players:
   rts
 .endproc
@@ -370,52 +389,52 @@ exit_move_players:
 
 ball_alive:
   lda #4                      ; Live Sprite (Title #4)
-  sta $021D
+  sta Ball_Ypos+1
   lda #%00000010
   bit Ball_Control
   beq move_left
   lda Ball_Speed              ; Speed Move Right BALL
   clc 
-  adc $021F
-  sta $021F
+  adc Ball_Xpos
+  sta Ball_Xpos
   jmp out_move_lateral
 move_left:
   lda #0                      ; Speed Move Letf BALL
   sec
   sbc Ball_Speed 
   clc 
-  adc $021F
-  sta $021F
+  adc Ball_Xpos
+  sta Ball_Xpos
 out_move_lateral:
   lda #%00000100
   bit Ball_Control
   beq move_up
   lda Ball_Speed              ; Speed Move Down BALL
   clc 
-  adc $021C
-  cmp #$DF                    ; Limite Inferior
+  adc Ball_Ypos
+  cmp #Ball_Limit_Under        ; Limite Inferior
   bcc no_swapUD  
   lda Ball_Control
   and #%11111011
   sta Ball_Control
   jmp out_move_vertical
 no_swapUD:  
-  sta $021C
+  sta Ball_Ypos
   jmp out_move_vertical
 move_up:
   lda #0                      ; Speed Move up BALL
   sec
   sbc Ball_Speed
   clc 
-  adc $021C
-  cmp #$24                    ; Limite Superior
+  adc Ball_Ypos
+  cmp #Ball_Limit_Upper        ; Limite Superior
   bcs no_swapDU
   lda Ball_Control
   ora #%000000100
   sta Ball_Control
   jmp out_move_vertical
 no_swapDU:
-  sta $021C
+  sta Ball_Ypos
 out_move_vertical:
 out_alive:
   rts
@@ -423,36 +442,40 @@ out_alive:
 
 
 .proc Colision_Ball_Player
-  lda $021F
+  lda Ball_Xpos
   sec
-  sbc #7
-  cmp $0207
+  sbc #7                    ; Control Impact distance (plus for most distance detect collision)
+  cmp P0_Xpos
   bcs No_Colision_Left
-  lda $021C
-  cmp $0204
+  lda Ball_Ypos
+  clc
+  adc #4                    ; P0 UP hitbox Control (plus for more hitbox)
+  cmp P0_Ypos
   bcc No_Colision_Left
-  lda $021C
-  sec
-  sbc #8
-  cmp $020C
+  lda Ball_Ypos
+  sec    
+  sbc #9                    ; P0 DW hitbox Control (plus for more hitbox)
+  cmp P0_Ypos+8             ; 3ºSprite Y pos
   bcs No_Colision_Left
   lda Ball_Control
   ora #$02
   sta Ball_Control
   jmp out_colision
 No_Colision_Left:
-  lda $021F
+  lda Ball_Xpos
   clc
-  adc #2
-  cmp $0213
+  adc #3                    ; Control Impact distance (plus for most distance detect collision)
+  cmp P1_Xpos
   bcc No_Colision_Right
-  lda $021C
-  cmp $0210
+  lda Ball_Ypos
+  clc
+  adc #4                    ; P0 UP hitbox Control (plus for more hitbox)
+  cmp P1_Ypos
   bcc No_Colision_Right
-  lda $021C
+  lda Ball_Ypos
   sec
-  sbc #8
-  cmp $0218
+  sbc #9                    ; P0 DW hitbox Control (plus for more hitbox)
+  cmp P1_Ypos+8             ; 3ºSprite Y pos
   bcs No_Colision_Right
   lda Ball_Control
   and #$FD
@@ -464,31 +487,32 @@ out_colision:
 
 
 .proc Dead_Ball
-  lda $021F
+  lda Ball_Xpos
   cmp #4
   bcs No_Dead_Left
   lda Ball_Control
   and #$FE
   ora #2
   sta Ball_Control
-  lda $0207
+  lda P0_Xpos
   clc 
   adc #4
-  sta $021F
+  sta Ball_Xpos
 No_Dead_Left:
-  lda $021F
+  lda Ball_Xpos
   cmp #252
   bcc out_dead
   lda Ball_Control
   and #$FC
   sta Ball_Control
-  lda $0213
+  lda P1_Xpos
   sec 
   sbc #4
-  sta $021F
+  sta Ball_Xpos
 out_dead: 
   rts
 .endproc
+
 
 palettes:
   .byte $00
@@ -526,7 +550,7 @@ sprites:
   .byte 117, 3, %00000000, (256-8)
 
   ;Ball ;byte 28
-  .byte 111, 0, 0, 114
+  .byte 111, 0, 0, 115
 
   ;P0 Score MS Score
   .byte 11, 5, %00000000, 36
