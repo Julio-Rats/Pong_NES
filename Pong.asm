@@ -17,15 +17,16 @@
 
 .segment "CODE"
 
-;===================  Constante   =============================
-Speed_ball    = 03
-Speed_players = 04
-P0_Xpos       = $0207 ; DW
-P1_Xpos       = $0213 ; DW
-P0_Ypos       = $0204 ; DW
-P1_Ypos       = $0210 ; DW
-Ball_Xpos     = $021F ; DW
-Ball_Ypos     = $021C ; DW
+;===================  Constantes   =============================
+Speed_ball       = 03
+Speed_players 	 = 04
+N_Sprites     	 = 24
+P0_Xpos       	 = $0207 ; DW
+P1_Xpos       	 = $0213 ; DW
+P0_Ypos       	 = $0204 ; DW
+P1_Ypos       	 = $0210 ; DW
+Ball_Xpos     	 = $021F ; DW
+Ball_Ypos     	 = $021C ; DW
 Ball_Limit_Under = $E0
 Ball_Limit_Upper = $23
 
@@ -40,9 +41,9 @@ Ball_Control = $00
 ;  2                      move_down?      1-true,0-false
 ;  4                      side_dead?      1-left,0-right
 
-; Memoria reserada para futura implementação de velocidade dinamica
+; Memoria reservada para futura implementação de velocidade dinamica
 Ball_Speed   = $01  
-; Memoria reserada para futura implementação de velocidade dinamica    
+; Memoria reservada para futura implementação de velocidade dinamica
 Player_Speed = $02
 P0_Score     = $03
 P1_Score     = $04
@@ -383,7 +384,7 @@ exit_move_players:
   lda #%00000001
   bit Ball_Control
   bne ball_alive
-  lda #0            ; Dead Sprite (translucido)
+  lda #0            	      ; Dead Sprite (translucido)
   sta $021D
   jmp out_alive
 
@@ -412,7 +413,7 @@ out_move_lateral:
   lda Ball_Speed              ; Speed Move Down BALL
   clc 
   adc Ball_Ypos
-  cmp #Ball_Limit_Under        ; Limite Inferior
+  cmp #Ball_Limit_Under       ; Limite Inferior
   bcc no_swapUD  
   lda Ball_Control
   and #%11111011
@@ -427,7 +428,7 @@ move_up:
   sbc Ball_Speed
   clc 
   adc Ball_Ypos
-  cmp #Ball_Limit_Upper        ; Limite Superior
+  cmp #Ball_Limit_Upper       ; Limite Superior
   bcs no_swapDU
   lda Ball_Control
   ora #%000000100
@@ -536,7 +537,6 @@ palettes:
 
 
 sprites:
-   N_Sprites = 24
   .byte 0, 0, %00000000, 0
 
   ;P0
