@@ -1,8 +1,8 @@
 .segment "HEADER"
   .byte $4E, $45            ; iNES header identifier
-  .byte $53, $1A     
+  .byte $53, $1A
   .byte $02, $01            ; 2x 16KB PRG-ROM Banks, 1x  8KB CHR-ROM
-  .byte $00, $00            ; mapper 0, horizontal mirroring,  no battery, 
+  .byte $00, $00            ; mapper 0, horizontal mirroring,  no battery,
   .byte $00, $00            ; NTSC
   .byte $00, $00            ; Reserved (NESv2) (RAM chr)
   .byte $00, $00            ; Reserved (NESv2) (WRAM)
@@ -20,13 +20,13 @@
 ;===================  Constantes   =============================
 Speed_ball       = 03
 Speed_players 	 = 04
-N_Sprites     	 = 24
-P0_Xpos       	 = $0207 ; DW
-P1_Xpos       	 = $0213 ; DW
-P0_Ypos       	 = $0204 ; DW
-P1_Ypos       	 = $0210 ; DW
-Ball_Xpos     	 = $021F ; DW
-Ball_Ypos     	 = $021C ; DW
+N_Sprites     	 = sprites_end - sprites
+P0_Xpos       	 = $0207
+P1_Xpos       	 = $0213
+P0_Ypos       	 = $0204
+P1_Ypos       	 = $0210
+Ball_Xpos     	 = $021F
+Ball_Ypos     	 = $021C
 Ball_Limit_Under = $E0
 Ball_Limit_Upper = $23
 
@@ -42,7 +42,7 @@ Ball_Control = $00
 ;  4                      side_dead?      1-left,0-right
 
 ; Memoria reservada para futura implementação de velocidade dinamica
-Ball_Speed   = $01  
+Ball_Speed   = $01
 ; Memoria reservada para futura implementação de velocidade dinamica
 Player_Speed = $02
 P0_Score     = $03
@@ -50,6 +50,11 @@ P1_Score     = $04
 
 .proc nmi
   jsr Read_Control
+  ; Descomente para mover Players para nivel da bola (semi IA)
+  ;ldx #0
+  ;jsr IA_Px
+  ;ldx #12
+  ;jsr IA_Px
   jsr Colision_Ball_Player
   jsr Dead_Ball
   jsr Status_Ball
@@ -69,7 +74,7 @@ P1_Score     = $04
   cld
   ldx #%01000000
   stx $4017
-  ldx #$ff
+  ldx #$FF
   txs
   inx
   stx $2000
@@ -89,13 +94,13 @@ P1_Score     = $04
   sta $0600, x
   sta $0700, x
   inx
-  bne @clearMemory 
+  bne @clearMemory
   ; Inicializando Variaveis
   lda #%000000000
   sta Ball_Control
   lda #0
   sta P0_Score
-  sta P1_Score   
+  sta P1_Score
   lda #Speed_ball
   sta Ball_Speed
   lda #Speed_players
@@ -104,7 +109,26 @@ P1_Score     = $04
 @vblankWait2:
   bit $2002
   bpl @vblankWait2
+
+
 main:
+  jsr LoadPalettes
+  jsr LoadBG
+  jsr LoadSprites
+
+  lda #$02
+  sta $4014
+  lda #%00011110
+  sta $2001
+  lda #%10000000
+  sta $2000
+
+ForeverLoop:
+  jmp ForeverLoop
+.endproc
+
+
+.proc LoadBG
   lda #$04
   sta $2000
   jsr Line_Center
@@ -113,19 +137,8 @@ main:
   jsr Line_Up
   jsr Line_Down
   jsr Attrib_Lines
-  jsr LoadPalettes
-  jsr LoadSprites
-
-  lda #$02
-  sta $4014
-  lda #%00011000
-  sta $2001
-  lda #%10000000
-  sta $2000
-ForeverLoop:
-  jmp ForeverLoop
+  rts
 .endproc
-
 
 .proc LoadPalettes
   bit $2002
@@ -150,77 +163,77 @@ ForeverLoop:
   lda sprites, x
   sta $0200, x
   inx
-  cpx #(N_Sprites*4)
+  cpx #(N_Sprites)
   bne @loop
   rts
 .endproc
 
 
 .proc Line_Up
-  bit $2002             
+  bit $2002
   LDA #$20
-  STA $2006             
+  STA $2006
   LDA #$80
-  STA $2006             
-  LDX #$00              
-  LDA #1
+  STA $2006
+  LDX #$00
+  LDA #1           ; Tile 1 (Horizon line)
 @loop:
-  STA $2007              
-  INX                   
-  CPX #$20            
-  BNE @loop  
+  STA $2007
+  INX
+  CPX #$20
+  BNE @loop
   rts
 .endproc
 
 
 .proc Line_Down
-  bit $2002             
+  bit $2002
   LDA #$23
-  STA $2006             
+  STA $2006
   LDA #$80
-  STA $2006             
-  LDX #$00              
-  LDA #1
+  STA $2006
+  LDX #$00
+  LDA #1           ; Tile 1 (Horizon line)
 @loop:
-  STA $2007              
-  INX                   
-  CPX #$20            
-  BNE @loop  
+  STA $2007
+  INX
+  CPX #$20
+  BNE @loop
   rts
 .endproc
 
 
 .proc Line_Center
-  bit $2002             
+  bit $2002
   LDA #$20
-  STA $2006             
-  LDA #$B0
-  STA $2006             
-  LDX #$00              
-  LDA #2
+  STA $2006
+  LDA #$AF         ; Center NameTable
+  STA $2006
+  LDX #$00
+  LDA #2           ; Tile 2 (Vertical line)
 @loop:
-  STA $2007              
-  INX                   
-  EOR #$02
-  CPX #24            
-  BNE @loop  
+  STA $2007
+  INX
+  EOR #$02         ; Switching between Block 2 and Block 0 (Dashed line)
+  CPX #24
+  BNE @loop
   rts
 .endproc
 
 
 .proc Attrib_Lines
-  bit $2002             
+  bit $2002
   LDA #$23
-  STA $2006             
+  STA $2006
   LDA #$C0
-  STA $2006             
-  LDX #$00              
-  LDA #0
+  STA $2006
+  LDX #0
+  LDA #0           ; Pallet color 0 for all BCG block
 @loop:
-  STA $2007              
-  INX                   
-  CPX #$40            
-  BNE @loop  
+  STA $2007
+  INX
+  CPX #$40
+  BNE @loop
   RTS
 .endproc
 
@@ -357,9 +370,9 @@ exit_read_control:
   tya
   clc
   adc P0_Ypos,x
-  cmp #$26
+  cmp #Ball_Limit_Upper+1
   bcc exit_move_players
-  cmp #$CE
+  cmp #Ball_Limit_Under-18
   bcs exit_move_players
   sta P0_Ypos,x
   tya
@@ -380,7 +393,7 @@ exit_move_players:
   ;  1                      move_right?     1-true,0-false
   ;  2                      move_down?      1-true,0-false
   ;  4                      side_dead?      1-left,0-right
-  
+
   lda #%00000001
   bit Ball_Control
   bne ball_alive
@@ -395,15 +408,15 @@ ball_alive:
   bit Ball_Control
   beq move_left
   lda Ball_Speed              ; Speed Move Right BALL
-  clc 
+  clc
   adc Ball_Xpos
   sta Ball_Xpos
   jmp out_move_lateral
 move_left:
   lda #0                      ; Speed Move Letf BALL
   sec
-  sbc Ball_Speed 
-  clc 
+  sbc Ball_Speed
+  clc
   adc Ball_Xpos
   sta Ball_Xpos
 out_move_lateral:
@@ -411,22 +424,22 @@ out_move_lateral:
   bit Ball_Control
   beq move_up
   lda Ball_Speed              ; Speed Move Down BALL
-  clc 
+  clc
   adc Ball_Ypos
   cmp #Ball_Limit_Under       ; Limite Inferior
-  bcc no_swapUD  
+  bcc no_swapUD
   lda Ball_Control
   and #%11111011
   sta Ball_Control
   jmp out_move_vertical
-no_swapUD:  
+no_swapUD:
   sta Ball_Ypos
   jmp out_move_vertical
 move_up:
   lda #0                      ; Speed Move up BALL
   sec
   sbc Ball_Speed
-  clc 
+  clc
   adc Ball_Ypos
   cmp #Ball_Limit_Upper       ; Limite Superior
   bcs no_swapDU
@@ -454,7 +467,7 @@ out_alive:
   cmp P0_Ypos
   bcc No_Colision_Left
   lda Ball_Ypos
-  sec    
+  sec
   sbc #9                    ; P0 DW hitbox Control (plus for more hitbox)
   cmp P0_Ypos+8             ; 3ºSprite Y pos
   bcs No_Colision_Left
@@ -496,7 +509,7 @@ out_colision:
   ora #2
   sta Ball_Control
   lda P0_Xpos
-  clc 
+  clc
   adc #4
   sta Ball_Xpos
 No_Dead_Left:
@@ -507,13 +520,35 @@ No_Dead_Left:
   and #$FC
   sta Ball_Control
   lda P1_Xpos
-  sec 
+  sec
   sbc #4
   sta Ball_Xpos
-out_dead: 
+out_dead:
   rts
 .endproc
 
+
+.proc IA_Px
+  lda Ball_Ypos
+  sec
+  sbc #10
+  cmp #Ball_Limit_Upper
+  bcs no_boud_up
+  lda #Ball_Limit_Upper+2
+no_boud_up:
+  cmp #Ball_Limit_Under-20
+  bcc no_boud_dw
+  lda #Ball_Limit_Under-20
+no_boud_dw:
+  sta P0_Ypos,x
+  clc
+  adc #6
+  sta P0_Ypos+4,x
+  clc
+  adc #6
+  sta P0_Ypos+8,x
+  rts
+.endproc
 
 palettes:
   .byte $00
@@ -540,14 +575,14 @@ sprites:
   .byte 0, 0, %00000000, 0
 
   ;P0
-  .byte 105, 3, %01000000, 8
-  .byte 111, 3, %01000000, 8
-  .byte 117, 3, %01000000, 8
+  .byte 105, 3, %01000000, 4
+  .byte 111, 3, %01000000, 4
+  .byte 117, 3, %01000000, 4
 
   ;P1
-  .byte 105, 3, %00000000, (256-8)
-  .byte 111, 3, %00000000, (256-8)
-  .byte 117, 3, %00000000, (256-8)
+  .byte 105, 3, %00000000, (255-9)
+  .byte 111, 3, %00000000, (255-9)
+  .byte 117, 3, %00000000, (255-9)
 
   ;Ball ;byte 28
   .byte 111, 0, 0, 115
@@ -576,7 +611,8 @@ sprites:
   .byte 19, 5, %10000000, 220
   .byte 19, 5, %11000000, 226
 
- 
+sprites_end:
+
 .segment "CHARS"
 
 ; Tile 0: Blank
@@ -642,10 +678,10 @@ sprites:
 .byte %00000000
 
 ; Tile 4: Ball
-.byte %11110000
-.byte %11110000
-.byte %11110000
-.byte %11110000
+.byte %01110000
+.byte %11111000
+.byte %11111000
+.byte %01110000
 .byte %00000000
 .byte %00000000
 .byte %00000000
